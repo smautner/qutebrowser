@@ -111,6 +111,16 @@ class TabbedBrowser(QWidget):
     current_tab_changed = pyqtSignal(browsertab.AbstractTab)
     new_tab = pyqtSignal(browsertab.AbstractTab, int)
 
+
+
+    def ifenter_passthrough(self,tab):
+        """enter passthrough hook"""
+        url = str(tab.url())
+        if any([x in url for x in ['localhost:888','overleaf.com']]):
+        #if "localhost:888" in  str(tab.url()): 
+            modeman.enter(self._win_id, usertypes.KeyMode.passthrough,reason='super cool hack', only_if_normal=False)
+
+
     def __init__(self, *, win_id, private, parent=None):
         if private:
             assert not qtutils.is_single_process()
@@ -755,6 +765,9 @@ class TabbedBrowser(QWidget):
         QTimer.singleShot(0, self._update_window_title)
         self._tab_insert_idx_left = self.widget.currentIndex()
         self._tab_insert_idx_right = self.widget.currentIndex() + 1
+        
+        self.ifenter_passthrough(tab)
+ 
 
     @pyqtSlot()
     def on_cmd_return_pressed(self):
@@ -794,6 +807,7 @@ class TabbedBrowser(QWidget):
         self.widget.set_tab_indicator_color(idx, color)
         if idx == self.widget.currentIndex():
             tab.private_api.handle_auto_insert_mode(ok)
+        self.ifenter_passthrough(tab)
 
     @pyqtSlot()
     def _on_scroll_pos_changed(self):

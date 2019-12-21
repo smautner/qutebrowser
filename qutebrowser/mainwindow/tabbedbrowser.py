@@ -124,7 +124,6 @@ class TabbedBrowser(QWidget):
     def ifenter_mpv(self,tab):
         url =tab.url().toString()
         if ".youtube.com/watch?v=" in url:
-            subprocess.Popen("i3-msg focus right".split())
             mpvcmd = "mpv --pause --force-window %s --loop=inf &" % url
             print (mpvcmd)
             subprocess.Popen(mpvcmd.split())

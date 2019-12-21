@@ -19,6 +19,7 @@
 
 """The main tabbed browser widget."""
 
+import subprocess
 import collections
 import functools
 
@@ -120,6 +121,14 @@ class TabbedBrowser(QWidget):
         #if "localhost:888" in  str(tab.url()): 
             modeman.enter(self._win_id, usertypes.KeyMode.passthrough,reason='super cool hack', only_if_normal=False)
 
+    def ifenter_mpv(self,tab):
+        url =tab.url().toString()
+        if ".youtube.com/watch?v=" in url:
+            subprocess.Popen("i3-msg focus right".split())
+            mpvcmd = "mpv --pause --force-window %s --loop=inf &" % url
+            print (mpvcmd)
+            subprocess.Popen(mpvcmd.split())
+            self.close_tab( tab, add_undo=False, new_undo=False)
 
     def __init__(self, *, win_id, private, parent=None):
         if private:
@@ -808,6 +817,7 @@ class TabbedBrowser(QWidget):
         if idx == self.widget.currentIndex():
             tab.private_api.handle_auto_insert_mode(ok)
         self.ifenter_passthrough(tab)
+        self.ifenter_mpv(tab)
 
     @pyqtSlot()
     def _on_scroll_pos_changed(self):

@@ -1,6 +1,6 @@
 # vim: ft=python fileencoding=utf-8 sts=4 sw=4 et:
 
-# Copyright 2014-2019 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
+# Copyright 2014-2020 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
 #
 # This file is part of qutebrowser.
 #
@@ -26,10 +26,11 @@ import os
 import traceback
 
 from PyQt5.QtCore import QUrl
-from PyQt5.QtWidgets import QApplication  # pylint: disable=unused-import
+from PyQt5.QtWidgets import QApplication
 
 from qutebrowser.browser import qutescheme
 from qutebrowser.utils import log, objreg, usertypes, message, debug, utils
+from qutebrowser.keyinput import modeman
 from qutebrowser.commands import runners
 from qutebrowser.api import cmdutils
 from qutebrowser.misc import (  # pylint: disable=unused-import
@@ -50,8 +51,7 @@ def later(ms: int, command: str, win_id: int) -> None:
     if ms < 0:
         raise cmdutils.CommandError("I can't run something in the past!")
     commandrunner = runners.CommandRunner(win_id)
-    app = objreg.get('app')
-    timer = usertypes.Timer(name='later', parent=app)
+    timer = usertypes.Timer(name='later', parent=QApplication.instance())
     try:
         timer.setSingleShot(True)
         try:
@@ -128,19 +128,18 @@ def debug_cache_stats() -> None:
 @cmdutils.register(debug=True)
 def debug_console() -> None:
     """Show the debugging console."""
-    try:
-        con_widget = objreg.get('debug-console')
-    except KeyError:
+    if consolewidget.console_widget is None:
         log.misc.debug('initializing debug console')
-        con_widget = consolewidget.ConsoleWidget()
-        objreg.register('debug-console', con_widget)
+        consolewidget.init()
 
-    if con_widget.isVisible():
+    assert consolewidget.console_widget is not None
+
+    if consolewidget.console_widget.isVisible():
         log.misc.debug('hiding debug console')
-        con_widget.hide()
+        consolewidget.console_widget.hide()
     else:
         log.misc.debug('showing debug console')
-        con_widget.show()
+        consolewidget.console_widget.show()
 
 
 @cmdutils.register(maxsplit=0, debug=True, no_cmd_split=True)
@@ -203,7 +202,7 @@ def repeat_command(win_id: int, count: int = None) -> None:
     Args:
         count: Which count to pass the command.
     """
-    mode_manager = objreg.get('mode-manager', scope='window', window=win_id)
+    mode_manager = modeman.instance(win_id)
     if mode_manager.mode not in runners.last_command:
         raise cmdutils.CommandError("You didn't do anything yet.")
     cmd = runners.last_command[mode_manager.mode]
@@ -234,8 +233,11 @@ def debug_log_level(level: str) -> None:
     Args:
         level: The log level to set.
     """
+    if log.console_handler is None:
+        raise cmdutils.CommandError("No log.console_handler. Not attached "
+                                    "to a console?")
+
     log.change_console_formatter(log.LOG_LEVELS[level.upper()])
-    assert log.console_handler is not None
     log.console_handler.setLevel(log.LOG_LEVELS[level.upper()])
 
 

@@ -1,6 +1,6 @@
 # vim: ft=python fileencoding=utf-8 sts=4 sw=4 et:
 
-# Copyright 2014-2019 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
+# Copyright 2014-2020 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
 #
 # This file is part of qutebrowser.
 #
@@ -21,7 +21,7 @@
 
 import typing
 
-from PyQt5.QtCore import QRect
+from PyQt5.QtCore import QRect, Qt
 from PyQt5.QtWebKit import QWebElement, QWebSettings
 from PyQt5.QtWebKitWidgets import QWebFrame
 
@@ -204,7 +204,8 @@ class WebKitElement(webelem.AbstractWebElement):
                     rect["top"] *= zoom
                     width *= zoom
                     height *= zoom
-                rect = QRect(rect["left"], rect["top"], width, height)
+                rect = QRect(int(rect["left"]), int(rect["top"]),
+                             int(width), int(height))
                 frame = self._elem.webFrame()
                 while frame is not None:
                     # Translate to parent frames' position (scroll position
@@ -353,7 +354,8 @@ class WebKitElement(webelem.AbstractWebElement):
             log.webelem.debug("Failed to click via JS, falling back to event")
             self._click_fake_event(click_target)
 
-    def _click_fake_event(self, click_target: usertypes.ClickTarget) -> None:
+    def _click_fake_event(self, click_target: usertypes.ClickTarget,
+                          button: Qt.MouseButton = Qt.LeftButton) -> None:
         self._tab.data.override_target = click_target
         super()._click_fake_event(click_target)
 

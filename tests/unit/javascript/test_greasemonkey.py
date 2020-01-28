@@ -1,5 +1,5 @@
 # vim: ft=python fileencoding=utf-8 sts=4 sw=4 et:
-# Copyright 2017-2019 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
+# Copyright 2017-2020 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
 
 # This file is part of qutebrowser.
 #
@@ -309,7 +309,7 @@ class TestWindowIsolation:
         callback.assert_called_with(setup.expected)
 
     # The JSCore in 602.1 doesn't fully support Proxy.
-    @pytest.mark.qtwebkit6021_skip
+    @pytest.mark.qtwebkit6021_xfail
     def test_webkit(self, webview, setup):
         elem = webview.page().mainFrame().documentElement()
         elem.evaluateJavaScript(setup.setup_script)

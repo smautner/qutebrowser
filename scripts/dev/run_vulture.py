@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # vim: ft=python fileencoding=utf-8 sts=4 sw=4 et:
 
-# Copyright 2015-2019 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
+# Copyright 2015-2020 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
 
 # This file is part of qutebrowser.
 #
@@ -133,6 +133,12 @@ def whitelist_generator():  # noqa
 
     # component hooks
     yield 'qutebrowser.components.adblock.on_config_changed'
+
+    # used in type comments
+    yield 'pending_download_type'
+    yield 'world_id_type'
+    yield 'ParserDictType'
+    yield 'qutebrowser.config.configutils.Values._VmapKeyType'
 
 
 def filter_func(item):

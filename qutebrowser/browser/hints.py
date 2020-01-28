@@ -1,6 +1,6 @@
 # vim: ft=python fileencoding=utf-8 sts=4 sw=4 et:
 
-# Copyright 2014-2019 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
+# Copyright 2014-2020 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
 #
 # This file is part of qutebrowser.
 #
@@ -33,8 +33,8 @@ from PyQt5.QtCore import pyqtSlot, QObject, Qt, QUrl
 from PyQt5.QtWidgets import QLabel
 
 from qutebrowser.config import config, configexc
-from qutebrowser.keyinput import modeman, modeparsers
-from qutebrowser.browser import webelem
+from qutebrowser.keyinput import modeman, modeparsers, basekeyparser
+from qutebrowser.browser import webelem, history
 from qutebrowser.commands import userscripts, runners
 from qutebrowser.api import cmdutils
 from qutebrowser.utils import usertypes, log, qtutils, message, objreg, utils
@@ -45,7 +45,7 @@ if typing.TYPE_CHECKING:
 Target = enum.Enum('Target', ['normal', 'current', 'tab', 'tab_fg', 'tab_bg',
                               'window', 'yank', 'yank_primary', 'run', 'fill',
                               'hover', 'download', 'userscript', 'spawn',
-                              'delete'])
+                              'delete', 'right_click'])
 
 
 class HintingError(Exception):
@@ -146,6 +146,7 @@ class HintContext:
         target: What to do with the opened links.
                 normal/current/tab/tab_fg/tab_bg/window: Get passed to
                                                          BrowserTab.
+                right_click: Right-click the selected element.
                 yank/yank_primary: Yank to clipboard/primary selection.
                 run: Run a command.
                 fill: Fill commandline with link.
@@ -203,7 +204,6 @@ class HintActions:
             Target.tab_fg: usertypes.ClickTarget.tab,
             Target.tab_bg: usertypes.ClickTarget.tab_bg,
             Target.window: usertypes.ClickTarget.window,
-            Target.hover: usertypes.ClickTarget.normal,
         }
         if config.val.tabs.background:
             target_mapping[Target.tab] = usertypes.ClickTarget.tab_bg
@@ -217,6 +217,8 @@ class HintActions:
         try:
             if context.target == Target.hover:
                 elem.hover()
+            elif context.target == Target.right_click:
+                elem.right_click()
             elif context.target == Target.current:
                 elem.remove_blank_target()
                 elem.click(target_mapping[context.target])
@@ -284,12 +286,10 @@ class HintActions:
 
         prompt = False if context.rapid else None
         qnam = context.tab.private_api.networkaccessmanager()
-        user_agent = context.tab.private_api.user_agent()
 
         # FIXME:qtwebengine do this with QtWebEngine downloads?
         download_manager = objreg.get('qtnetwork-download-manager')
-        download_manager.get(url, qnam=qnam, user_agent=user_agent,
-                             prompt_download_directory=prompt)
+        download_manager.get(url, qnam=qnam, prompt_download_directory=prompt)
 
     def call_userscript(self, elem: webelem.AbstractWebElement,
                         context: HintContext) -> None:
@@ -366,6 +366,7 @@ class HintManager(QObject):
         Target.run: "Run a command on a hint",
         Target.fill: "Set hint in commandline",
         Target.hover: "Hover over a hint",
+        Target.right_click: "Right-click hint",
         Target.download: "Download hint",
         Target.userscript: "Call userscript via hint",
         Target.spawn: "Spawn command via hint",
@@ -381,8 +382,7 @@ class HintManager(QObject):
 
         self._actions = HintActions(win_id)
 
-        mode_manager = objreg.get('mode-manager', scope='window',
-                                  window=win_id)
+        mode_manager = modeman.instance(self._win_id)
         mode_manager.left.connect(self.on_mode_left)
 
     def _get_text(self) -> str:
@@ -592,6 +592,11 @@ class HintManager(QObject):
         elemstr = elemstr.casefold()
         return filterstr == elemstr
 
+    def _get_keyparser(self,
+                       mode: usertypes.KeyMode) -> basekeyparser.BaseKeyParser:
+        mode_manager = modeman.instance(self._win_id)
+        return mode_manager.parsers[mode]
+
     def _start_cb(self, elems: _ElemsType) -> None:
         """Initialize the elements and labels based on the context set."""
         if self._context is None:
@@ -623,9 +628,7 @@ class HintManager(QObject):
             self._context.all_labels.append(label)
             self._context.labels[string] = label
 
-        keyparsers = objreg.get('keyparsers', scope='window',
-                                window=self._win_id)
-        keyparser = keyparsers[usertypes.KeyMode.hint]
+        keyparser = self._get_keyparser(usertypes.KeyMode.hint)
         keyparser.update_bindings(strings)
 
         message_bridge = objreg.get('message-bridge', scope='window',
@@ -681,6 +684,7 @@ class HintManager(QObject):
                 - `tab-bg`: Open the link in a new background tab.
                 - `window`: Open the link in a new window.
                 - `hover` : Hover over the link.
+                - `right-click`: Right-click the element.
                 - `yank`: Yank the link to the clipboard.
                 - `yank-primary`: Yank the link to the primary selection.
                 - `run`: Run the argument as command.
@@ -720,8 +724,7 @@ class HintManager(QObject):
         if tab is None:
             raise cmdutils.CommandError("No WebView available yet!")
 
-        mode_manager = objreg.get('mode-manager', scope='window',
-                                  window=self._win_id)
+        mode_manager = modeman.instance(self._win_id)
         if mode_manager.mode == usertypes.KeyMode.hint:
             modeman.leave(self._win_id, usertypes.KeyMode.hint, 're-hinting')
 
@@ -820,9 +823,7 @@ class HintManager(QObject):
         if follow:
             # apply auto_follow_timeout
             timeout = config.val.hints.auto_follow_timeout
-            keyparsers = objreg.get('keyparsers', scope='window',
-                                    window=self._win_id)
-            normal_parser = keyparsers[usertypes.KeyMode.normal]
+            normal_parser = self._get_keyparser(usertypes.KeyMode.normal)
             normal_parser.set_inhibited_timeout(timeout)
             # unpacking gets us the first (and only) key in the dict.
             self._fire(*visible)
@@ -897,9 +898,8 @@ class HintManager(QObject):
             for label, string in zip(visible, strings):
                 label.update_text('', string)
                 self._context.labels[string] = label
-            keyparsers = objreg.get('keyparsers', scope='window',
-                                    window=self._win_id)
-            keyparser = keyparsers[usertypes.KeyMode.hint]
+
+            keyparser = self._get_keyparser(usertypes.KeyMode.hint)
             keyparser.update_bindings(strings, preserve_filter=True)
 
             # Note: filter_hints can be called with non-None filterstr only
@@ -925,6 +925,7 @@ class HintManager(QObject):
             Target.tab_bg: self._actions.click,
             Target.window: self._actions.click,
             Target.hover: self._actions.click,
+            Target.right_click: self._actions.click,
             # _download needs a QWebElement to get the frame.
             Target.download: self._actions.download,
             Target.userscript: self._actions.call_userscript,
@@ -955,7 +956,7 @@ class HintManager(QObject):
             handler = functools.partial(url_handlers[self._context.target],
                                         url, self._context)
             if self._context.add_history:
-                objreg.get('web-history').add_url(url, "")
+                history.web_history.add_url(url, "")
         else:
             raise ValueError("No suitable handler found!")
 
